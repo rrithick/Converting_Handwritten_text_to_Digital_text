@@ -6,9 +6,10 @@ import io
 from PIL import Image
 import os
 
-# === 🔑 Replace these with your Azure OCR credentials ===
-subscription_key = "DHYf1n1YJ9s2UjP0l5iFg0Lt0Kobh2GWkLVEmE9oRwtT7Nhi05lcJQQJ99BGAC3pKaRXJ3w3AAAFACOGfDV4"
-endpoint = "https://eastasia.api.cognitive.microsoft.com/vision/v3.2/read/analyze"
+# === 🔑 Replace these with your Azure OCR credentials ==
+subscription_key = os.getenv("AZURE_KEY")
+
+endpoint = os.getenv("AZURE_ENDPOINT")
 
 # === 🎨 Unicode-capable PDF class ===
 class UnicodePDF(FPDF):
