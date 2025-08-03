@@ -5,6 +5,7 @@ from fpdf import FPDF
 import io
 from PIL import Image
 import os
+import re
 
 # === 🔑 Replace these with your Azure OCR credentials ==
 subscription_key = os.getenv("AZURE_KEY")
@@ -16,7 +17,6 @@ class UnicodePDF(FPDF):
     def __init__(self):
         super().__init__()
         font_path = "DejaVuSans.ttf"
-
         if not os.path.exists(font_path):
             st.error(f"⚠️ Font not found: {font_path}")
             st.stop()
@@ -24,12 +24,32 @@ class UnicodePDF(FPDF):
         self.set_font("DejaVu", "", 12)
         self.set_auto_page_break(auto=True, margin=15)
 
+# === 🧮 Accuracy Functions ===
+def clean_and_split(text):
+    return re.sub(r"[^\w@-]", " ", text.lower()).split()
+
+def compute_accuracy(predicted, ground_truth):
+    pred_words = set(clean_and_split(predicted))
+    gt_words = set(clean_and_split(ground_truth))
+
+    total = len(gt_words)
+    correct = len(pred_words.intersection(gt_words))
+
+    accuracy = round((correct / total) * 100, 2) if total else 0.0
+    return accuracy, correct, total
+
+def get_mismatched_words(predicted, ground_truth):
+    pred_set = set(clean_and_split(predicted))
+    gt_words = clean_and_split(ground_truth)
+    mismatches = [word for word in gt_words if word not in pred_set]
+    return mismatches
+
 # === 🚀 Streamlit App ===
-st.set_page_config(page_title="Handwritten OCR to PDF", layout="centered")
+st.set_page_config(page_title="Azure OCR to PDF", layout="centered")
 st.title("📝 Convert Handwritten Text to PDF using Azure OCR")
 
 uploaded_files = st.file_uploader(
-    "Upload one or more handwritten/printed images (JPEG/PNG/PDF, < 4MB each):",
+    "Upload handwritten/printed image(s) (JPEG/PNG/PDF, < 4MB each):",
     type=["jpg", "jpeg", "png", "pdf"],
     accept_multiple_files=True
 )
@@ -45,11 +65,10 @@ if uploaded_files:
             st.error("❌ Image too large (must be < 4MB). Please resize and try again.")
             continue
 
-        # Show preview (if image)
         if uploaded_file.type != "application/pdf":
             st.image(uploaded_file, use_column_width=True)
 
-        # === 🧠 Azure OCR ===
+        # === Azure OCR Call ===
         headers = {
             "Ocp-Apim-Subscription-Key": subscription_key,
             "Content-Type": "application/octet-stream"
@@ -89,9 +108,23 @@ if uploaded_files:
                 extracted_text = "\n".join(lines)
 
                 st.success("✅ Text Extracted:")
-                st.text(extracted_text)
+                st.text_area("Extracted Text", value=extracted_text, height=200)
 
-                # === 📝 Create PDF ===
+                # === Ground Truth Input and Accuracy ===
+                st.subheader("🔎 Optional: Enter Ground Truth to Evaluate Accuracy")
+                ground_truth = st.text_area("Paste the expected/correct text here:", height=200)
+
+                if ground_truth:
+                    accuracy, correct, total = compute_accuracy(extracted_text, ground_truth)
+                    mismatches = get_mismatched_words(extracted_text, ground_truth)
+
+                    st.info(f"📊 Word-Level Accuracy: **{accuracy}%** ({correct}/{total} correct)")
+
+                    if mismatches:
+                        st.warning("❌ Words not matched in OCR output:")
+                        st.code(", ".join(mismatches), language="text")
+
+                # === PDF Output ===
                 pdf = UnicodePDF()
                 pdf.add_page()
                 pdf.set_font("DejaVu", size=14)
